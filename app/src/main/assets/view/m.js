@@ -43,7 +43,13 @@ window.__INSETCHANGE=function(s,n){
   __SYSHSTAT=s;
   document.documentElement.style.setProperty("--sys-nav-height", n+"px");
   document.documentElement.style.setProperty("--sys-stat-height", s+"px");
-  console.log("INSET: "+s+" / "+n);
+};
+var __VIDLANGS='';
+window.__VIDLANGAVAIL=function(s){
+  __VIDLANGS=s;
+  try{
+    pb.cfg_update_el("alang");
+  }catch(e){}
 };
 requestAnimationFrame(function(){
   try{
@@ -1198,19 +1204,19 @@ const wave={
         for (var i=0;i<d.length;i++){
           var s=d[i];
           var st=s.textContent.toLowerCase().trim();
-          if (st=='vidplay'){
+          if (st=='vidstream'){
             sid.main=s;
             data.servers[stid].push(
-              pb.serverobj('VidPlay',0)
+              pb.serverobj('VidStream',0)
             );
             if (pb.server_selected(3)==0){
               load_s=s;
             }
           }
-          else if (st=='mycloud'){
+          else if (st=='megaf'){
             sid.mirror=s;
             data.servers[stid].push(
-              pb.serverobj('MyCloud',1)
+              pb.serverobj('MegaF',1)
             );
             if (pb.server_selected(3)==1){
               load_s=s;
@@ -2443,10 +2449,12 @@ const _API={
               }
               else if (pd.vcmd=='initializing'){
                 _API.videoPost('quality',pb.cfg_data.quality);
+                _API.videoPost('audiolang',pb.cfg_data.alang);
                 return;
               }
               else if (pd.vcmd=='ready'){
                 _API.videoPost('quality',pb.cfg_data.quality);
+                _API.videoPost('audiolang',pb.cfg_data.alang);
               }
               else if (pd.vcmd=='resolution'){
                 try{
@@ -2454,6 +2462,9 @@ const _API={
                   __VIDRESCB(_API.videoElectronVars.resolution[0],_API.videoElectronVars.resolution[1]);
                   console.warn("GOT RESOLUTION: "+pd.val);
                 }catch(e){}
+              }
+              else if (pd.vcmd=='langavail'){
+                window.__VIDLANGAVAIL(pd.val);
               }
               pb.vid_event(pd.vcmd,pd.val);
             }
@@ -2476,10 +2487,14 @@ const _API={
           __VIDRESH=0;
         }
       }catch(e){};
-      pb.vid.contentWindow.postMessage(JSON.stringify({
-        vcmd:c,
-        val:v
-      }),'*');
+      if (pb.vid){
+        try{
+          pb.vid.contentWindow.postMessage(JSON.stringify({
+            vcmd:c,
+            val:v
+          }),'*');
+        }catch(e){};
+      }
     }
   },
   videoSetUrl:function(src){
@@ -2899,10 +2914,77 @@ const _API={
     return uri;
   },
 
+  videoAudioTrack:function(id, update){
+    if (_ISELECTRON){
+      _API.videoPost('audiolang',id);
+    }
+    else if ('videoAudioTrack' in _JSAPI){
+      _JSAPI.videoAudioTrack(id, update?true:false);
+    }
+  },
+
+  videoTrackQuality:function(id, update){
+    if ('videoTrackQuality' in _JSAPI){
+      _JSAPI.videoTrackQuality(id, update?true:false);
+    }
+  },
+
+  
+
+  /*** AUDIO LANGUAGES ***/
+  audiolang:[
+    ["Original",""],
+    ["English","eng"],
+    ["French","fre"],
+    ["German","ger"],
+    ["Hindi","hin"],
+    ["Indonesian","ind"],
+    ["Italian","ita"],
+    ["Portuguese (Brazil)","por"],
+    ["Spanish","spa"],
+    ["Tamil","tam"],
+    ["Telugu","tel"]
+  ],
+  audiolang_titles:function(withavail){
+    var avl=__VIDLANGS.split(',');
+    var olang=[];
+    for (var i=0;i<_API.audiolang.length;i++){
+      var txp=_API.audiolang[i][0];
+      var tx=special(txp);
+      if (withavail){
+        if (!txp){
+          txp='';
+        }
+        else{
+          txp=txp.toLowerCase().substring(0,3);
+        }
+        if (i==0 || avl.indexOf(txp)>-1){
+          tx+='<span class="alangavail"><c>check</c> Available</span>';
+        }
+      }
+      olang.push(tx);
+    }
+    return olang;
+  },
+  audiolang_getindex:function(id){
+    if (!id){
+      return 0;
+    }
+    for (var i=0;i<_API.audiolang.length;i++){
+      if (_API.audiolang[i][1]==id){
+        return i;
+      }
+    }
+    return 0;
+  },
+  audiolang_getname:function(id){
+    return _API.audiolang[_API.audiolang_getindex(id)][0];
+  },
+
   /*** TRANSLATE LANGUAGES ***/
   tlangs:[
     ["Hardsub","hard"],
-    ["Dub","dub"],
+    // ["Dub","dub"],
     ["Disable Subtitle","nosub"],
     ["English","en"],
     /* sources */
@@ -3329,9 +3411,10 @@ const _API={
               s=ep_data.d.ep_val[p.number];
             }
             if (dub){
-              var surl=slug+'-dub-episode-'+s.ep;
+              // var surl=slug+'-dub-episode-'+s.ep;
+              var surl=slug+'-episode-'+s.ep;
               var c=__AFLIX.enc2(surl);
-              s.dub='/watch/'+surl+'?server=&c='+c;
+              s.dub='/watch/'+surl+'?server=&dub=ENG&c='+c;
             }
             else{
               var surl=slug+'-episode-'+s.ep;
@@ -3596,7 +3679,7 @@ const _API={
   currentStreamTypeValue:0,
   streamTypeById:function(l){
     t=1;
-    if (l=='dub'){
+    if (l=='dub' || pb.cfg_data.dubaudio){
       t=2;
     }
     else if (l=='hard' || l==''){
@@ -4698,7 +4781,7 @@ const vtt={
             }
             if (('tx' in q) && ('ts' in q) && ('te' in q)){
               if (q.tx){
-                if (q.tx.toLowerCase().indexOf('animeflix.live')==-1){
+                if (q.tx.toLowerCase().indexOf('animeflix')<0){
                   t.push(q);
                   p++;
                 }
@@ -5366,6 +5449,7 @@ const pb={
     server:0,
     scale:0,
     lang:'',
+    alang:'',
     ccstyle:0,
     bgimg:{},
     quality:0,
@@ -5429,6 +5513,7 @@ const pb={
         
         
         pb.cfg_data.lang=('lang' in j)?j.lang:'';
+        pb.cfg_data.alang=('alang' in j)?j.alang:'';
         _API.setStreamType(0,0);
 
         pb.cfg_data.server=0;
@@ -5566,6 +5651,7 @@ const pb={
     
     pb.cfg_data.scale=0;
     pb.cfg_data.lang='';
+    pb.cfg_data.alang='';
     pb.cfg_data.ccstyle=0;
     pb.cfg_data.bgimg={};
     pb.cfg_data.quality=0;
@@ -5741,6 +5827,21 @@ const pb={
       else if (key=='ccstyle'){
         el.lastElementChild.innerHTML=vtt.stylename(pb.cfg_data.ccstyle);
       }
+      else if (key=='alang'){
+        if (root!=pb.pb_settings){
+          el.lastElementChild.innerHTML=_API.audiolang_getname(pb.cfg_data.alang);
+        }
+        else{
+          var avl=__VIDLANGS.split(',');
+          var vsel=avl.indexOf(pb.cfg_data.alang);
+          if (vsel>-1 && pb.cfg_data.alang){
+            el.lastElementChild.innerHTML=_API.audiolang_getname(pb.cfg_data.alang);
+          }
+          else{
+            el.lastElementChild.innerHTML=_API.audiolang_getname('');
+          }
+        }
+      }
       else if (key=='bgimg'){
         el.lastElementChild.innerHTML=pb.cfg_data.bgimg.title?pb.cfg_data.bgimg.title:"No Wallpaper";
       }
@@ -5754,15 +5855,15 @@ const pb={
             el.lastElementChild.innerHTML="Auto "+__VIDRESH+"p";
             vr=toInt(__VIDRESH);
           }
-          else if (_ISELECTRON){
+          else /* if (_ISELECTRON) */ {
             el.lastElementChild.innerHTML=(pb.cfgquality_name[pb.cfg_data.quality]+" "+
               (__VIDRESH?__VIDRESH+"p":"")).trim();
             vr=__VIDRESH;
           }
-          else{
-            el.lastElementChild.innerHTML=pb.sel_quality;
-            vr=toInt(pb.sel_quality);
-          }
+          // else{
+          //   el.lastElementChild.innerHTML=pb.sel_quality;
+          //   vr=toInt(pb.sel_quality);
+          // }
           if (vr==0){
             ico='hd';
           }
@@ -5830,8 +5931,9 @@ const pb={
         //   pb.cfg_setactive(el,!__SD3);
         // }
         else if (key=='dubaudio'){
-          pb.cfg_setactive(el,__SD3);
+          // pb.cfg_setactive(el,__SD3);
         }
+
         /* Set Values */
         if (key=='server'){
           el.lastElementChild.innerHTML=pb.cfgserver_name[pb.cfg_data[key]];
@@ -5970,6 +6072,7 @@ const pb={
       pb.cfg_update_el('streamselect');
 
       pb.cfg_update_el('lang');
+      pb.cfg_update_el('alang');
 
       pb.cfg_update_el('cachesz');
       pb.cfg_update_el('useimgcdn');
@@ -6060,6 +6163,7 @@ const pb={
     pb.vid=null;
     pb.vid_reset_stat();
     pb.pb_vid.innerHTML='';
+    __VIDLANGS='';
     
     _API.setVideo('');
     _JSAPI.videoSetMeta("","","");
@@ -6474,7 +6578,7 @@ const pb={
     ];
 
     /* Auto Quality */
-    if (_ISELECTRON || (!__SD6 && pb.cfg_data.quality==0)){
+    if (true || _ISELECTRON || (!__SD6 && pb.cfg_data.quality==0)){
       console.log("NO-PARSE AUTO M3u8 QUALITY="+pb.cfg_data.quality);
       pb.init_video_player_url(src);
       pb.cfg_update_el("quality");
@@ -6783,6 +6887,9 @@ const pb={
       if (isquality&&_ISELECTRON){
         _API.videoPost('quality',pb.cfg_data.quality);
       }
+      else if (isquality){
+        _API.videoTrackQuality(pb.cfg_data.quality,true);
+      }
       else{
         pb.startpos_val=pb.vid_stat.pos;
         pb.init_video();
@@ -6979,7 +7086,7 @@ const pb={
 
         // Parsing Player HTML
         var d=$n('div','',null,null,r.responseText);
-        var srcscript=d.querySelectorAll('script')[2];
+        var srcscript=d.querySelectorAll('script')[1];
         if (!srcscript){
           console.log("Player HTML Failed = "+r.responseText);
           d.innerHTML='';
@@ -7036,10 +7143,15 @@ const pb={
               LEVEL_SWITCHED:2,
               ERROR:3
             };
+            var abg=$('animebg');
+            /* Create dummy video tag */
+            var vid_tmp=$n('video','',{'id':'player'},abg,'');
+            console.log(iscript);
             eval(iscript+`
             play_data.pos[0]=[introstart&&introend?introstart:0,introstart&&introend?introend:0];
             play_data.pos[1]=[outrostart&&outroend?outrostart:0,outrostart&&outroend?outroend:0];
             `);
+            abg.removeChild(vid_tmp);
             delete window.Hls;
             delete window.hls;
           }catch(e){
@@ -7730,6 +7842,23 @@ const pb={
       else if (key=="ccstyle"){
         vtt.changestyle();
       }
+      else if (key=="alang"){
+        listOrder.showList(
+          "Audio Language",
+          _API.audiolang_titles(pb.state?true:false),
+          _API.audiolang_getindex(pb.cfg_data.alang),
+          function(chval){
+            if (chval!=null){
+              pb.cfg_data.alang=_API.audiolang[chval][1];
+              pb.cfg_update_el(key);
+              pb.cfg_save();
+              _API.videoAudioTrack(pb.cfg_data.alang,pb.state?true:false);
+              //-- Should Set Audio Language
+            }
+          },
+          true
+        );
+      }
       else if (key=="bgimg"){
         // pb.state=0;
         if (!_API.wallpaper_list_onload){
@@ -8347,10 +8476,16 @@ const pb={
     pb.pb.classList.remove('menushow');
     pb.skipauto_update(1);
     body.classList.add('playback_menu_hide');
+    pb.pb._nocursor=1;
+    try{
+      pb.pb.onmousemove();
+    }catch(e){}
   },
   menu_show:function(pos){
     body.classList.remove('playback_menu_hide');
     pb.pb.classList.add('menushow');
+    pb.pb.classList.remove('nocursor');
+    pb.pb._nocursor=0;
     pb.menus[pb.menusel].classList.remove('active');
     pb.menusel=(pos===undefined?2:pos);
     pb.pb_actions.classList.add('active');
@@ -8662,7 +8797,29 @@ const pb={
         }
       },null,null,true);
 
-      // pb.pb.onmousemove=
+      pb.pb.lastmove=0;
+      pb.pb._nocursor=0;
+      pb.pb.onmousemove=function(){
+        if (pb.pb.__hidecursor_to){
+          clearTimeout(pb.pb.__hidecursor_to);
+          pb.pb.__hidecursor_to=null;
+        }
+        if (pb.pb._nocursor==1){
+          pb.pb.__hidecursor_to=setTimeout(
+            function(){
+              pb.pb.__hidecursor_to=null;
+              pb.pb._nocursor=2;
+              pb.pb.classList.add('nocursor');
+            },
+            1000
+          );
+        }
+        else if (pb.pb._nocursor==2){
+          pb.pb._nocursor=1;
+          pb.pb.classList.remove('nocursor');
+          pb.pb.onmousemove();
+        }
+      };
       pb.pb.ontouchmove=function(){
         if (pb.pb.classList.contains('menushow')){
           pb.lastkey=$tick();
@@ -8984,6 +9141,8 @@ const pb={
       // }
       pb.pb_settings._s_streamselect=$n('div','',{action:'*streamselect'},pb.pb_settings.P,'<c>subtitles</c>');
     }
+
+    pb.pb_settings._s_alang=$n('div','',{action:'*alang'},pb.pb_settings.P,'<c>text_to_speech</c> <span>Original</span>');
     
     /*
     sub, softsub, dub
@@ -8991,7 +9150,7 @@ const pb={
 
 
     pb.menu_select(pb.pb_settings,pb.pb_settings.P.firstElementChild);
-    pb.pb_settings._midx=2;
+    pb.pb_settings._midx=1.5;
     pb.cfg_update_el();
     _API.videoScale(pb.cfg_data.scale);
   },
@@ -9395,6 +9554,9 @@ const pb={
       ratingSystem.blockMessage();
       return;
     }
+
+    _API.videoAudioTrack(pb.cfg_data.alang,false);
+    _API.videoTrackQuality(pb.cfg_data.quality,false);
 
     pb.init_video();
 
@@ -12561,6 +12723,22 @@ const home={
           home.settings.slang.P,
           '<c>brand_family</c> Subtitle Style <span class="value">Style 1</span>'
         );
+        home.settings.tools._s_dubaudio=$n(
+          'div','',{
+            action:'*dubaudio',
+            s_desc:"Always use DUB stream when available"
+          },
+          home.settings.slang.P,
+          '<c class="check">check</c><c>speech_to_text</c> Prefer DUB Stream'
+        );
+        home.settings.tools._s_alang=$n(
+          'div','',{
+            action:'*alang',
+            s_desc:"Select prefered stream audio language (only for supported source only)"
+          },
+          home.settings.slang.P,
+          '<c>text_to_speech</c> Audio Language<span class="value"></span>'
+        );
 
         /* Video */
         home.settings.tools._s_autonext=$n(
@@ -12623,14 +12801,6 @@ const home={
           },
           home.settings.video.P,
           '<c class="check">clear</c><c>cloud_download</c> Preload Next Episode'
-        );
-        home.settings.tools._s_dubaudio=$n(
-          'div','',{
-            action:'*dubaudio',
-            s_desc:"Use dub with subtitle on source 3/4 if available. WARNING: Subtitle may out of sync!"
-          },
-          home.settings.video.P,
-          '<c class="check">check</c><c>speech_to_text</c> Use DUB Stream'
         );
         
 
@@ -15294,10 +15464,15 @@ const _MAL={
     }
     // console.log("ANILIST-TOKEN: "+_MAL.altoken);
   },
-  req:function(uri, method, cb){
+  req:function(uri, method, cb, dat){
     if (!_MAL.token){
       cb({ok:false,responseText:''});
       return;
+    }
+    if (dat){
+      if (!_ISELECTRON){
+        uri+='?'+dat;
+      }
     }
     var xhttp = new XMLHttpRequest();
     xhttp.onload = function() {
@@ -15311,6 +15486,10 @@ const _MAL={
     xhttp.open(method, "/__proxy/https://api.myanimelist.net"+uri, true);
     xhttp.setRequestHeader('Accept', 'application/json' );
     xhttp.setRequestHeader("Authorization", "Bearer "+_MAL.token);
+    if (_ISELECTRON && dat){
+      xhttp.setRequestHeader("Content-Type","application/x-www-form-urlencoded");
+      xhttp.send(dat);
+    }
     xhttp.send();
   },
   alreq:function(q, vars, cb, notoken, retry){
@@ -16003,16 +16182,16 @@ const _MAL={
     _MAL.req(uri,"GET",cb);
   },
   set_ep:function(animeid, ep, cb){
-    var uri='/v2/anime/'+animeid+'/my_list_status?num_watched_episodes='+ep;
-    _MAL.req(uri,"PUT",cb);
+    var uri='/v2/anime/'+animeid+'/my_list_status';
+    _MAL.req(uri,"PUT",cb,'num_watched_episodes='+ep);
   },
   set_del:function(animeid, cb){
     var uri='/v2/anime/'+animeid+'/my_list_status';
     _MAL.req(uri,"DELETE",cb);
   },
   set_list:function(animeid, stat, cb){
-    var uri='/v2/anime/'+animeid+'/my_list_status?status='+enc(stat);
-    _MAL.req(uri,"PUT",cb);
+    var uri='/v2/anime/'+animeid+'/my_list_status';
+    _MAL.req(uri,"PUT",'cb,status='+enc(stat));
   },
   login:function(isanilist,logintype){
     if (_MAL.token && !isanilist){

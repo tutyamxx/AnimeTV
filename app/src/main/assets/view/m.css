@@ -353,7 +353,7 @@ c {
 }
 
 c.loader {
-  animation: loader_keyframe 2s linear infinite;
+  animation: loader_keyframe 4s linear infinite;
 }
 
 /* zloader */
@@ -362,7 +362,7 @@ c.loader {
   height: 8vw;
   position: relative;
   display: inline-block;
-  animation: z-loader-ani 4s linear infinite reverse;
+  animation: z-loader-ani 10s linear infinite reverse;
   vertical-align: middle;
 }
 
@@ -1698,7 +1698,7 @@ c.loader {
 }
 
 #pb_settings.pb_menu {
-  width: 60vw;
+  width: 80vw;
   margin-top: .5vw;
   font-size: var(--fs-10vw);
   opacity: 0;
@@ -2196,6 +2196,10 @@ c.loader {
 #pb.menushow #pb_action_streamtype.active{
   visibility: visible;
   opacity: 1;
+}
+
+#pb:not(.menushow).nocursor{
+  cursor:none !important;
 }
 
 #pb_iactions {
@@ -4563,6 +4567,11 @@ c.loader {
   float:right;
   font-size:var(--fs-8vw);
   color:#888;
+}
+#listorder .settings_group p div span.alangavail{
+  float:right;
+  font-size:var(--fs-10vw);
+  color:var(--accent-1);
 }
 
 #listorder .listorder_title.profile{

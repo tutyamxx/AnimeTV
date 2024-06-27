@@ -68,7 +68,9 @@ const intercept={
   /* stream domain names */
   domains:{
     vidplays: [
-      "vid142.site",
+      "megaf.cc",
+      "vid2a41.site",
+      "vid1a52.site",
       "mcloud.bz"
     ],
     aniwatch:[
@@ -84,6 +86,31 @@ const intercept={
     intercept.playerInjectString=common.readfile(common.injectPath("view_player.html"));
     intercept.youtubeInjectString=common.readfile(common.injectPath("yt.html"));
     protocol.handle('https', intercept.handler);
+    intercept.init_server_vars();
+  },
+
+  /* check for update */
+  async init_server_vars(){
+    let f=await net.fetch(
+      "https://raw.githubusercontent.com/amarullz/AnimeTV/master/server.json?"+((new Date()).getTime()),
+      {
+        method: "GET",
+        bypassCustomProtocolHandlers: false
+      }
+    );
+    try{
+      let body=await f.text();
+      let d=JSON.parse(body);
+      if (intercept.domains.vidplays.indexOf(d.stream_domain)==-1){
+        intercept.domains.vidplays.push(d.stream_domain);
+      }
+      if (intercept.domains.vidplays.indexOf(d.stream_domain1)==-1){
+        intercept.domains.vidplays.push(d.stream_domain1);
+      }
+      if (intercept.domains.vidplays.indexOf(d.stream_domain2)==-1){
+        intercept.domains.vidplays.push(d.stream_domain2);
+      }
+    }catch(e){}
   },
 
   /* check and modify for origin and referer */

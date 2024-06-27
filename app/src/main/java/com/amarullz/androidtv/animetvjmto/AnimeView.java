@@ -56,15 +56,23 @@ import android.widget.Toast;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.core.view.WindowInsetsCompat;
+import androidx.media3.common.C;
+import androidx.media3.common.Format;
 import androidx.media3.common.MediaItem;
+import androidx.media3.common.MediaMetadata;
 import androidx.media3.common.PlaybackParameters;
+import androidx.media3.common.TrackGroup;
 import androidx.media3.common.Tracks;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.exoplayer.analytics.AnalyticsListener;
 import androidx.media3.exoplayer.dash.DashMediaSource;
+import androidx.media3.exoplayer.source.LoadEventInfo;
+import androidx.media3.exoplayer.source.MediaLoadData;
 import androidx.media3.exoplayer.source.MediaSource;
 import androidx.media3.exoplayer.source.ProgressiveMediaSource;
+import androidx.media3.exoplayer.source.TrackGroupArray;
 
+import com.devbrackets.android.exomedia.core.renderer.RendererType;
 import com.devbrackets.android.exomedia.core.source.data.DataSourceFactoryProvider;
 import com.devbrackets.android.exomedia.core.video.scale.MatrixManager;
 import com.devbrackets.android.exomedia.core.video.scale.ScaleType;
@@ -73,6 +81,7 @@ import com.devbrackets.android.exomedia.core.video.surface.SurfaceViewSurfaceEnv
 import com.devbrackets.android.exomedia.nmp.ExoMediaPlayerImpl;
 import com.devbrackets.android.exomedia.nmp.config.PlayerConfig;
 import com.devbrackets.android.exomedia.nmp.config.PlayerConfigBuilder;
+import com.devbrackets.android.exomedia.nmp.manager.track.TrackManager;
 import com.google.common.base.Charsets;
 
 import org.json.JSONArray;
@@ -88,6 +97,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
@@ -110,7 +120,7 @@ import javax.crypto.spec.SecretKeySpec;
   public final AnimeApi aApi;
   public String playerInjectString;
   public boolean webViewReady=false;
-  public static boolean USE_WEB_VIEW_ASSETS=false;
+  public static boolean USE_WEB_VIEW_ASSETS=true;
 
   public AudioManager audioManager;
 
@@ -559,6 +569,114 @@ import javax.crypto.spec.SecretKeySpec;
     ));
   }
 
+  public String videoAudioLanguage="";
+  public int videoSelectedQuality=0; /* auto */
+  public TrackManager videoTrackManager=null;
+
+  public int arrayFindInt(int[] a, int f){
+    for (int i=0;i<a.length;i++){
+      if (a[i]==f){
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  public void initVideoTracks(){
+    if (videoView==null){
+      return;
+    }
+
+    Map<RendererType, TrackGroupArray> tracks =
+        videoPlayer.getAvailableTracks();
+    if (tracks==null){
+      return;
+    }
+
+    boolean audioSelected=false;
+    int[] resList=null;
+    int[] resListSorted=null;
+    String availLang="";
+    int qualityGroupIndex=0;
+
+    for (RendererType rendererType : tracks.keySet()) {
+      TrackGroupArray trackGroupArray = tracks.get(rendererType);
+      for (int i = 0; i < trackGroupArray.length; i++) {
+        TrackGroup tr=trackGroupArray.get(i);
+        if (tr.type== C.TRACK_TYPE_AUDIO) {
+          Format fr = tr.getFormat(0);
+          if (!audioSelected &&
+              fr.label!=null &&
+              !videoAudioLanguage.equals("") &&
+              fr.label.toLowerCase().startsWith(videoAudioLanguage.toLowerCase())){
+            Log.d(_TAG,"[TRACK] Audio Select("+i+", "+fr.label+")");
+            videoPlayer.setSelectedTrack(rendererType, i, 0);
+            audioSelected=true;
+          }
+          else{
+            Log.d(_TAG,"[TRACK] Audio Available("+i+", "+fr.label+")");
+          }
+          if (i>0 && fr.label!=null){
+            availLang+=","+fr.label.toLowerCase().substring(0,3);
+          }
+        }
+        else if (tr.type== C.TRACK_TYPE_VIDEO) {
+          qualityGroupIndex=i;
+          resList=new int[tr.length];
+          resListSorted=new int[tr.length];
+          for (int j=0;j<tr.length;j++){
+            Format fr=tr.getFormat(j);
+            resList[j]=resListSorted[j]=0;
+            if (fr.roleFlags==0) {
+              resList[j]=resListSorted[j]=fr.height;
+            }
+          }
+          Arrays.sort(resListSorted);
+        }
+      }
+    }
+    if (!audioSelected) {
+      Log.d(_TAG,"[TRACK] Audio Select Default");
+      videoPlayer.setSelectedTrack(RendererType.AUDIO, 0, 0);
+    }
+    if (resList!=null){
+      int rl=resList.length;
+      int sel_id=-1;
+      for (int i=0;i<rl;i++){
+        int fi=rl-(i+1);
+        if (i==videoSelectedQuality-1){
+          sel_id=arrayFindInt(resList,resListSorted[fi]);
+//          if (sel_id>=0) {
+//            break;
+//          }
+        }
+        Log.d(_TAG, "[TRACK] Sorted: "+i+" => "+resListSorted[fi]);
+      }
+      if (sel_id!=-1) {
+        Log.d(_TAG, "[TRACK] Quality Selected: "+sel_id+" => "+resList[sel_id]);
+        videoPlayer.setSelectedTrack(RendererType.VIDEO, qualityGroupIndex, sel_id);
+      }
+      else{
+        Log.d(_TAG, "[TRACK] Quality Selected: Auto - RES");
+        videoTrackManager.clearSelectedTracks(RendererType.VIDEO);
+      }
+    }
+    else{
+      Log.d(_TAG, "[TRACK] Quality Selected: Auto - NORES");
+      videoTrackManager.clearSelectedTracks(RendererType.VIDEO);
+    }
+    Log.d(_TAG, "[TRACK] Avail-Langs = "+availLang);
+    final String availLangVal=availLang;
+    activity.runOnUiThread(() -> {
+      if (webView != null) {
+        webView.evaluateJavascript(
+            "try{__VIDLANGAVAIL(\"" + availLangVal + "\");}catch(e){}",
+            null
+        );
+      }
+    });
+  }
+
   @SuppressLint("UnsafeOptInUsageError")
   public void initVideoView(){
     if (videoView!=null){
@@ -612,9 +730,13 @@ import javax.crypto.spec.SecretKeySpec;
           .setDefaultRequestProperties(settings)
           .setAllowCrossProtocolRedirects(true);
     };
+
+    videoTrackManager=new TrackManager(activity);
+    // trackManager.
     videoPlayerConfig=
         new PlayerConfigBuilder(activity)
             .setDataSourceFactoryProvider(videoDataSourceFactory)
+            .setTrackManager(videoTrackManager)
             .build();
     videoView=new SurfaceView(activity);
     videoViewEnvelope=new SurfaceViewSurfaceEnvelope(videoView,new MatrixManager());
@@ -634,7 +756,6 @@ import javax.crypto.spec.SecretKeySpec;
       setVideoSize(videoSize.width,videoSize.height);
     });
 
-
     videoPlayer.addAnalyticsListener(new AnalyticsListener() {
       @Override
       public void onPlaybackStateChanged(EventTime eventTime, int state) {
@@ -642,6 +763,14 @@ import javax.crypto.spec.SecretKeySpec;
         Log.d(_TAG, "ANL: onPlaybackStateChanged="+state);
         me().mediaSetDuration(videoPlayer.getDuration());
         me().mediaSetPosition(eventTime.currentPlaybackPositionMs);
+      }
+
+      @Override
+      public void onRenderedFirstFrame(EventTime eventTime, Object output,
+                                       long renderTimeMs) {
+        AnalyticsListener.super.onRenderedFirstFrame(eventTime, output,
+            renderTimeMs);
+        initVideoTracks();
       }
 
       @Override
@@ -658,6 +787,8 @@ import javax.crypto.spec.SecretKeySpec;
         me().mediaSetSpeed(playbackParameters.speed);
         me().mediaSetPosition(eventTime.currentPlaybackPositionMs);
       }
+
+
     });
   }
 
@@ -1259,6 +1390,32 @@ import javax.crypto.spec.SecretKeySpec;
     @JavascriptInterface
     public void videoTracks() {
       Log.d(_TAG,"Tracks = "+videoPlayer.getAvailableTracks());
+    }
+
+    @JavascriptInterface
+    public void videoAudioTrack(String id, boolean updatenow) {
+      videoAudioLanguage=id;
+      if (updatenow) {
+        activity.runOnUiThread(() -> {
+          try {
+            initVideoTracks();
+          } catch (Exception ignored) {
+          }
+        });
+      }
+    }
+
+    @JavascriptInterface
+    public void videoTrackQuality(int id, boolean updatenow) {
+      videoSelectedQuality=id;
+      if (updatenow) {
+        activity.runOnUiThread(() -> {
+          try {
+            initVideoTracks();
+          } catch (Exception ignored) {
+          }
+        });
+      }
     }
 
     @JavascriptInterface

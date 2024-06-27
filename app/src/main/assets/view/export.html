@@ -85,7 +85,9 @@ window.onload=function(){
         var k=l.list[i];
         if (k in l.detail){
           var dt=l.detail[k];
-          var n="a_"+slugString(dt.title_jp?dt.title_jp:dt.title,'');
+          var vslud=dt.title_jp?dt.title_jp:dt.title;
+          vslud=vslud.replace(/\([^)]*\)/g,'');
+          var n="a_"+slugString(vslud,'');
           if (!(n in out_d)){
             out_d[n]={
               s:[], /* sources */
@@ -98,14 +100,19 @@ window.onload=function(){
             od.p=dt.ep;
           }
           if ('play' in dt){
-            od.e['e'+dt.ep]=JSON.parse(JSON.stringify(dt.play));
+            if (dt.play[1]>0){
+              var val=Math.floor((dt.play[0] * 100) / dt.play[1]);
+              if (val>0 && val<=100){
+                od.e['e'+dt.ep]=val;
+              }
+            }
           }
           od.s[_SD]={
-            title:dt.title,
-            title_jp:dt.title_jp?dt.title_jp:dt.title,
-            poster:dt.poster,
-            tip:dt.tip,
-            url:dt.url
+            e:dt.title, /* en */
+            j:dt.title_jp?dt.title_jp:dt.title, /* jp */
+            i:dt.poster, /* posted */
+            t:dt.tip, /* ttip */
+            u:dt.url /* real url */
           };
           if (out_t.indexOf(n)==-1){
             out_t.push(n);
@@ -122,8 +129,8 @@ window.onload=function(){
     listing(list.history, out.detail, out.history);
     listing(list.fav, out.detail, out.fav);
     _JSAPI.varSet(_VARNAME,out);
-    console.log(source_domains[_SDZ]+" / "+host+" : "+_VARNAME);
-    console.log(JSON.stringify(out));
+    console.log("Export from "+source_domains[_SDZ]);
+    // console.log(JSON.stringify(out));
 
     if (_SDZ<source_domains.length-1){
       setTimeout(function(){
